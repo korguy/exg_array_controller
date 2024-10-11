@@ -4,8 +4,8 @@
 
 ### Install
 
-1. Windows [(Click Here)](https://github.com/korguy/exg_array_controller/releases/download/1.0.0/3D.Array.Editor.Setup.1.0.0.exe)
-
+1. Windows
+   - Go to release to get installer
 <hr/>
 
 ### Supported Features
