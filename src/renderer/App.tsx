@@ -15,13 +15,13 @@ import TextField from '@mui/material/TextField';
 
 const ARRAY_SIZE = 10;
 const CELL_SIZE = 5;
-const INITIAL_VALUE = -7;
+const INITIAL_VALUE = -2.5;
 const SCROLL_SPEED = 0.05;
 const MIN_VALUE = INITIAL_VALUE;
-const MAX_VALUE = 7;
+const MAX_VALUE = 2.5;
 const FLOAT_PRECISION = 1;
 
-const SAVE_SCALE = 16382;
+const SAVE_SCALE = 16383;
 // 인터페이스에서 위 값을 쓰되 비율 유지해서 저장할때는 뒤집어서 5, 0 16382
 
 interface ProcessState {
@@ -73,7 +73,7 @@ const mapValues = (array: number[][][], save: boolean) => {
       plane.map((row) =>
         row.map((value) =>
           Math.round(
-            ((-value + MAX_VALUE) / (MAX_VALUE - MIN_VALUE)) * SAVE_SCALE,
+            ((value + MAX_VALUE) / (MAX_VALUE - MIN_VALUE)) * SAVE_SCALE,
           ),
         ),
       ),
@@ -82,7 +82,7 @@ const mapValues = (array: number[][][], save: boolean) => {
   return array.map((plane) =>
     plane.map((row) =>
       row.map(
-        (value) => -((MAX_VALUE - MIN_VALUE) / SAVE_SCALE) * value + MAX_VALUE,
+        (value) => ((MAX_VALUE - MIN_VALUE) / SAVE_SCALE) * value - MAX_VALUE,
       ),
     ),
   );
@@ -124,7 +124,7 @@ function ArrayCanvas({ arrayData }: { arrayData: number[][] }) {
           // eslint-disable-next-line no-plusplus
           for (let j = 0; j < ARRAY_SIZE; j++) {
             const value = arrayData[i][j];
-            context.fillStyle = `rgba(109, 43, 46, ${(value + 7) / 7})`;
+            context.fillStyle = `rgba(109, 43, 46, ${(value + MAX_VALUE) / (MAX_VALUE - MIN_VALUE)})`;
             context.fillRect(
               j * CELL_SIZE,
               i * CELL_SIZE,
@@ -688,7 +688,7 @@ function Main() {
                           }
                         }}
                         style={{
-                          backgroundColor: `rgba(109, 43, 46, ${(value + 7) / 7})`,
+                          backgroundColor: `rgba(109, 43, 46, ${(value + MAX_VALUE) / (MAX_VALUE - MIN_VALUE)})`,
                           color: value <= 0.5 ? 'black' : 'white',
                           outline:
                             processState[selectedProcessIndex].activeCell?.i ===
@@ -800,19 +800,25 @@ function Main() {
                     <TextField
                       style={{ marginTop: '10px', width: '150px' }}
                       id="outlined-number"
-                      label="Current Value"
+                      label="Change Value"
                       type="number"
-                      value={
-                        processState[selectedProcessIndex].array[
-                          processState[selectedProcessIndex].activeCell.k
-                        ][processState[selectedProcessIndex].activeCell.i][
-                          processState[selectedProcessIndex].activeCell.j
-                        ]
-                      }
+                      // value={
+                      //   processState[selectedProcessIndex].array[
+                      //     processState[selectedProcessIndex].activeCell.k
+                      //   ][processState[selectedProcessIndex].activeCell.i][
+                      //     processState[selectedProcessIndex].activeCell.j
+                      //   ]
+                      // }
                       onChange={(e) => {
                         const { activeCell } =
                           processState[selectedProcessIndex];
                         if (activeCell) {
+                          if (parseFloat(e.target.value) < MIN_VALUE) {
+                            e.target.value = MIN_VALUE.toString();
+                          }
+                          if (parseFloat(e.target.value) > MAX_VALUE) {
+                            e.target.value = MAX_VALUE.toString();
+                          }
                           updateElement(
                             activeCell.k,
                             activeCell.i,
@@ -820,11 +826,6 @@ function Main() {
                             parseFloat(e.target.value),
                           );
                         }
-                      }}
-                      slotProps={{
-                        inputLabel: {
-                          shrink: true,
-                        },
                       }}
                     />
                   )}
