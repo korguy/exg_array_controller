@@ -81,8 +81,12 @@ const mapValues = (array: number[][][], save: boolean) => {
   }
   return array.map((plane) =>
     plane.map((row) =>
-      row.map(
-        (value) => ((MAX_VALUE - MIN_VALUE) / SAVE_SCALE) * value - MAX_VALUE,
+      row.map((value) =>
+        Number(
+          (((MAX_VALUE - MIN_VALUE) / SAVE_SCALE) * value - MAX_VALUE).toFixed(
+            FLOAT_PRECISION,
+          ),
+        ),
       ),
     ),
   );
@@ -384,6 +388,7 @@ function Main() {
   };
 
   async function saveFile(saveAs: boolean) {
+    console.log('Saving file... | new file name :', saveAs);
     try {
       const currentProcess =
         processStateRef.current[selectedProcessIndexRef.current];
@@ -397,13 +402,12 @@ function Main() {
         saveDir,
       });
       if (result.success) {
+        let fileName: string;
+        console.log('Saving file... | result.fileName :', result.fileName);
         if (os === 'Windows') {
-          const fileName = result.fileName
-            .replace(/\//g, '\\')
-            .split('/')
-            .pop();
+          fileName = result.fileName.replace(/\//g, '\\').split('/').pop();
         } else {
-          const fileName = result.fileName.split('/').pop();
+          fileName = result.fileName.split('/').pop();
         }
         updateNameAndPath(fileName, result.fileName);
         window.electronAPI.setTitle(fileName);
@@ -471,7 +475,22 @@ function Main() {
       if (result.error) {
         console.error('Error opening file:', result.error);
       } else {
-        console.log('File opened:', result.filePath);
+        let suffix = '';
+        let count = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          console.log(processStateRef.current);
+          const isFileOpen = processStateRef.current.some(
+            // eslint-disable-next-line no-loop-func
+            (process) =>
+              process.path === result.filePath.replace('.txt', `${suffix}.txt`),
+          );
+          if (!isFileOpen) {
+            break;
+          }
+          count += 1;
+          suffix = ` (${count})`;
+        }
         try {
           const content = JSON.parse(result.content);
           if (
@@ -482,21 +501,28 @@ function Main() {
                 plane.every((row) => Array.isArray(row)),
             )
           ) {
+            let fileName: String;
             if (os === 'Windows') {
-              const fileName = result.fileName
-                .replace(/\//g, '\\')
-                .split('/')
-                .pop();
+              // eslint-disable-next-line prefer-const
+              fileName = result.filePath.replace(/\//g, '\\').split('/').pop();
             } else {
-              const fileName = result.fileName.split('/').pop();
+              fileName = result.filePath.split('/').pop();
             }
+            if (suffix) {
+              const nameWithoutExt = fileName.replace('.txt', '');
+              fileName = `${nameWithoutExt}${suffix}.txt`;
+            }
+
+            // Construct the new path with suffix before extension
+            const newPath = result.filePath.replace('.txt', `${suffix}.txt`);
+
             setProcessState((prevState) => {
               const newProcessState = [
                 ...prevState,
                 {
                   ...EMPTY_PROCESS_STATE,
                   name: fileName,
-                  path: result.filePath,
+                  path: newPath,
                   array: mapValues(content, false),
                   selectedArrayIndex: 0,
                   saved: true,
