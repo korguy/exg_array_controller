@@ -13,6 +13,8 @@ import path from 'path';
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
+import { spawn } from 'child_process';
+// eslint-disable-next-line import/no-cycle
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 
@@ -27,6 +29,16 @@ class AppUpdater {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+ipcMain.on('excute-program', (event, arg) => {
+  const programPath = path.join(__dirname, 'resources', 'ArrayParser.exe');
+  try {
+    const child = spawn(programPath, { detached: true, stdio: 'ignore' }); // Example config
+    child.unref(); // Allow the process to continue running independently if needed
+  } catch (error) {
+    console.error('Error executing program:', error);
+  }
+});
 
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
@@ -70,6 +82,7 @@ export function handleOpenFile(window: BrowserWindow) {
 ipcMain.removeHandler('send-data-to-main');
 
 ipcMain.handle('send-data-to-main', async (event, arg) => {
+  console.log(arg.data);
   try {
     let filePath: string | undefined;
     let canceled = false;

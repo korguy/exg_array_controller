@@ -1,3 +1,5 @@
+/* eslint-disable no-underscore-dangle */
+/* eslint-disable react/jsx-props-no-spreading */
 /* eslint-disable no-else-return */
 /* eslint-disable jsx-a11y/no-noninteractive-element-to-interactive-role */
 /* eslint-disable react/no-array-index-key */
@@ -12,6 +14,8 @@ import AddIcon from '@mui/icons-material/Add';
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded';
 import Radio from '@mui/material/Radio';
 import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Autocomplete from '@mui/material/Autocomplete';
 
 const ARRAY_SIZE = 10;
 const CELL_SIZE = 5;
@@ -19,14 +23,27 @@ const INITIAL_VALUE = -2.5;
 const SCROLL_SPEED = 0.05;
 const MIN_VALUE = INITIAL_VALUE;
 const MAX_VALUE = 2.5;
-const FLOAT_PRECISION = 1;
+const FLOAT_PRECISION = 2;
 
 const SAVE_SCALE = 16383;
+const DROP_DOWN_PRESET = [
+  '-2',
+  '-1.75',
+  '-1.5',
+  '-1.25',
+  '-1',
+  '0',
+  '1',
+  '1.25',
+];
 // 인터페이스에서 위 값을 쓰되 비율 유지해서 저장할때는 뒤집어서 5, 0 16382
 
 interface ProcessState {
   name: string;
   array: number[][][];
+  time: number[];
+  timeCache: number[];
+  timeMode: boolean;
   activeCell: {
     k: number;
     i: number;
@@ -41,6 +58,9 @@ interface ProcessState {
 const EMPTY_PROCESS_STATE: ProcessState = {
   name: 'Untitled',
   array: [],
+  time: [],
+  timeCache: [],
+  timeMode: false,
   activeCell: null,
   selectedArrayIndex: null,
   saved: false,
@@ -168,16 +188,25 @@ function Main() {
   const [activeValue, setActiveValue] = useState<number | null>(null);
   const copiedArray = useRef<number[][] | null>(null);
   const [os, setOs] = useState('Unknown');
+  const autocompleteRef = useRef<HTMLInputElement | null>(null);
+
+  const setAutocompleteValue = (value: string) => {
+    if (autocompleteRef.current) {
+      autocompleteRef.current.value = value;
+    }
+  };
 
   const increaseArrayLength = () => {
     setProcessState((prevProcessState) => {
       const newProcessState = prevProcessState.map((process, idx) => {
         if (idx === selectedProcessIndex) {
           const newArray = [...process.array, createMatrix()];
+          const newTime = [...process.time, 0];
           const t = newArray.length;
           return {
             ...process,
             array: newArray,
+            time: newTime,
             selectedArrayIndex: t - 1,
           };
         }
@@ -239,11 +268,16 @@ function Main() {
             }
           }
 
+          const newTime = process.time.filter(
+            (_, idx) => idx !== indexToRemove,
+          );
+
           return {
             ...process,
             array: newArray,
             selectedArrayIndex: newSelectedArrayIndex,
             activeCell: null, // Reset activeCell
+            time: newTime,
           };
         }
         return process;
@@ -265,6 +299,9 @@ function Main() {
               ? selectedArrayIndex + 1
               : currentArray.length;
 
+          const newTime = [...process.time];
+          newTime.splice(insertIndex, 0, 0);
+
           // Create a new array with the new 2D array inserted
           const newArray = [...currentArray];
           newArray.splice(insertIndex, 0, newArray2D);
@@ -277,6 +314,7 @@ function Main() {
             ...process,
             array: newArray,
             selectedArrayIndex: newSelectedArrayIndex,
+            time: newTime,
           };
         } else {
           return process; // No change for other processes
@@ -398,7 +436,10 @@ function Main() {
       }
       const saveDir = saveAs ? '' : currentProcess.path;
       const result = await window.electronAPI.sendDataToMain({
-        data: mapValues(currentProcess.array, true),
+        data: {
+          time: currentProcess.time,
+          data: mapValues(currentProcess.array, true),
+        },
         saveDir,
       });
       if (result.success) {
@@ -418,6 +459,62 @@ function Main() {
       console.error('An error occurred:', error);
     }
   }
+
+  const clampValue = (input: string) => {
+    const numericValue = parseFloat(input);
+    if (Number.isNaN(numericValue)) return MIN_VALUE;
+    return Math.min(Math.max(numericValue, MIN_VALUE), MAX_VALUE);
+  };
+
+  const handleNumberChange = (e: any, newValue: string) => {
+    const { activeCell } = processState[selectedProcessIndex];
+    if (activeCell) {
+      updateElement(
+        activeCell.k,
+        activeCell.i,
+        activeCell.j,
+        clampValue(newValue),
+      );
+    }
+  };
+
+  const handlePresetSelect = (e: any, newValue: string) => {
+    const { activeCell } = processState[selectedProcessIndex];
+    if (activeCell) {
+      updateElement(
+        activeCell.k,
+        activeCell.i,
+        activeCell.j,
+        clampValue(newValue),
+      );
+    }
+  };
+
+  const handleExecuteProgram = () => {
+    window.electronAPI.executeProgram(); // Call the function exposed by preload.js
+  };
+
+  const handleManualModeToggle = () => {
+    const newProcessState = structuredClone(processState);
+    newProcessState[selectedProcessIndex].timeMode =
+      !newProcessState[selectedProcessIndex].timeMode;
+    if (!newProcessState[selectedProcessIndex].timeMode) {
+      newProcessState[selectedProcessIndex].time = new Array(
+        newProcessState[selectedProcessIndex].time.length,
+      ).fill(0);
+    }
+    setProcessState(newProcessState);
+  };
+
+  const handleManualTimeChange = (value: string) => {
+    const numericValue = parseInt(value, 10);
+    if (Number.isNaN(numericValue)) return;
+    const newProcessState = structuredClone(processState);
+    newProcessState[selectedProcessIndex].time[
+      newProcessState[selectedProcessIndex].selectedArrayIndex ?? 0
+    ] = numericValue;
+    setProcessState(newProcessState);
+  };
 
   useEffect(() => {
     const currentOS = detectOS();
@@ -494,12 +591,13 @@ function Main() {
         try {
           const content = JSON.parse(result.content);
           if (
-            Array.isArray(content) &&
-            content.every(
+            Array.isArray(content.data) &&
+            content.data.every(
               (plane) =>
                 Array.isArray(plane) &&
                 plane.every((row) => Array.isArray(row)),
-            )
+            ) &&
+            content.time.length === content.data.length
           ) {
             let fileName: String;
             if (os === 'Windows') {
@@ -523,7 +621,8 @@ function Main() {
                   ...EMPTY_PROCESS_STATE,
                   name: fileName,
                   path: newPath,
-                  array: mapValues(content, false),
+                  time: content.time,
+                  array: mapValues(content.data, false),
                   selectedArrayIndex: 0,
                   saved: true,
                   lastSavedArray: content,
@@ -561,12 +660,13 @@ function Main() {
       window.electronAPI.removeListener('request-paste', pasteHandler);
       window.removeEventListener('mouseup', handleMouseUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array
 
-  useEffect(() => {
-    console.log('Updated processState:', processState);
-    console.log('Updated selectedProcessIndex:', selectedProcessIndex);
-  }, [processState, selectedProcessIndex]);
+  // useEffect(() => {
+  //   console.log('Updated processState:', processState);
+  //   console.log('Updated selectedProcessIndex:', selectedProcessIndex);
+  // }, [processState, selectedProcessIndex]);
 
   useEffect(() => {
     const updatedProcessState = processState.map((process) => ({
@@ -578,6 +678,11 @@ function Main() {
       setProcessState(updatedProcessState);
     }
   }, [processState]);
+
+  useEffect(() => {
+    setAutocompleteValue(null);
+    console.log(autocompleteRef.current);
+  }, [processState, selectedProcessIndex]);
 
   return (
     <div className="main-container">
@@ -670,6 +775,9 @@ function Main() {
                 >
                   <CancelRoundedIcon />
                 </div>
+                <p className="preview-content-time-mode-text">
+                  {processState[selectedProcessIndex].time[k]}
+                </p>
               </div>
             ))}
             <div
@@ -791,6 +899,38 @@ function Main() {
                   <p className="menu-bar-title">Options</p>
                   <div className="menu-bar-option">
                     <Radio
+                      checked={processState[selectedProcessIndex].timeMode}
+                      onClick={handleManualModeToggle}
+                      value="a"
+                      name="radio-buttons"
+                      inputProps={{ 'aria-label': 'Show Values' }}
+                      size="small"
+                    />
+                    <p>Manual Conversion</p>
+                  </div>
+                  {processState[selectedProcessIndex].timeMode && (
+                    <div style={{ width: '200px' }}>
+                      <TextField
+                        id="outlined-number"
+                        label="Number"
+                        type="number"
+                        slotProps={{
+                          inputLabel: {
+                            shrink: true,
+                          },
+                        }}
+                        value={
+                          processState[selectedProcessIndex].time[
+                            processState[selectedProcessIndex]
+                              .selectedArrayIndex ?? 0
+                          ]
+                        }
+                        onChange={(e) => handleManualTimeChange(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="menu-bar-option">
+                    <Radio
                       checked={showValues}
                       onClick={() => setShowValues((prev) => !prev)}
                       value="a"
@@ -823,38 +963,35 @@ function Main() {
                     <p>Enable Scroll To Change</p>
                   </div>
                   {processState[selectedProcessIndex].activeCell && (
-                    <TextField
-                      style={{ marginTop: '10px', width: '150px' }}
-                      id="outlined-number"
-                      label="Change Value"
-                      type="number"
-                      // value={
-                      //   processState[selectedProcessIndex].array[
-                      //     processState[selectedProcessIndex].activeCell.k
-                      //   ][processState[selectedProcessIndex].activeCell.i][
-                      //     processState[selectedProcessIndex].activeCell.j
-                      //   ]
-                      // }
-                      onChange={(e) => {
-                        const { activeCell } =
-                          processState[selectedProcessIndex];
-                        if (activeCell) {
-                          if (parseFloat(e.target.value) < MIN_VALUE) {
-                            e.target.value = MIN_VALUE.toString();
-                          }
-                          if (parseFloat(e.target.value) > MAX_VALUE) {
-                            e.target.value = MAX_VALUE.toString();
-                          }
-                          updateElement(
-                            activeCell.k,
-                            activeCell.i,
-                            activeCell.j,
-                            parseFloat(e.target.value),
-                          );
-                        }
-                      }}
-                    />
+                    <div style={{ width: 200, margin: '20px auto' }}>
+                      <Autocomplete
+                        key={`${selectedProcessIndex}-${activeValue}`}
+                        freeSolo // Allows manual input in addition to dropdown options
+                        options={DROP_DOWN_PRESET}
+                        onInputChange={handleNumberChange} // Handles manual input
+                        onChange={handlePresetSelect} // Handles selection from dropdown
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            inputRef={autocompleteRef}
+                            label="Select or Enter Value"
+                            variant="outlined"
+                          />
+                        )}
+                      />
+                    </div>
                   )}
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      display: 'flex',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Button variant="contained" onClick={handleExecuteProgram}>
+                      Upload
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
