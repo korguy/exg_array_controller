@@ -30,10 +30,24 @@ class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
-ipcMain.on('excute-program', (event, arg) => {
-  const programPath = path.join(__dirname, 'resources', 'ArrayParser.exe');
+ipcMain.handle('get-resource-path', () => {
+  const exeDir = path.dirname(app.getPath('exe'));
+
+  // Construct the path to the resources folder
+  const resourcePath = path.join(exeDir, 'ArrayParser.exe');
+  return resourcePath;
+});
+
+ipcMain.on('excute-program', (event, programPath) => {
   try {
     const child = spawn(programPath, { detached: true, stdio: 'ignore' }); // Example config
+    child.on('error', (err) => {
+      console.error('Failed to start process:', err);
+    });
+
+    child.on('close', (code) => {
+      console.log(`Child process exited with code ${code}`);
+    });
     child.unref(); // Allow the process to continue running independently if needed
   } catch (error) {
     console.error('Error executing program:', error);
@@ -78,6 +92,10 @@ export function handleOpenFile(window: BrowserWindow) {
 }
 
 // eslint-disable-next-line consistent-return
+
+ipcMain.on('request-set-program-path', () => {
+  console.log('request-set-program-path');
+});
 
 ipcMain.removeHandler('send-data-to-main');
 

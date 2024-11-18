@@ -44,7 +44,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('request-paste', (_, paste) => callback(paste)),
   removeListener: (channel: string, callback: () => void) =>
     ipcRenderer.removeListener(channel, callback),
-  executeProgram: () => ipcRenderer.send('excute-program'),
+  executeProgram: (programPath: string) =>
+    ipcRenderer.send('excute-program', programPath),
+  onRequestSetProgramPath: (callback: () => void) =>
+    ipcRenderer.on('request-set-program-path', callback),
+  getResourcePath: () => ipcRenderer.invoke('get-resource-path'),
 });
 
 export type ElectronHandler = typeof electronHandler;

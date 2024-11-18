@@ -16,6 +16,11 @@ import Radio from '@mui/material/Radio';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Autocomplete from '@mui/material/Autocomplete';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 
 const ARRAY_SIZE = 10;
 const CELL_SIZE = 5;
@@ -192,6 +197,9 @@ function Main() {
   const copiedArray = useRef<number[][] | null>(null);
   const [os, setOs] = useState('Unknown');
   const autocompleteRef = useRef<HTMLInputElement | null>(null);
+
+  const [toggleProgramPath, setToggleProgramPath] = useState(false);
+  const [programPath, setProgramPath] = useState('');
 
   const setAutocompleteValue = (value: string) => {
     if (autocompleteRef.current) {
@@ -494,7 +502,11 @@ function Main() {
   };
 
   const handleExecuteProgram = () => {
-    window.electronAPI.executeProgram(); // Call the function exposed by preload.js
+    if (programPath) {
+      window.electronAPI.executeProgram(programPath); // Call the function exposed by preload.js
+    } else {
+      setToggleProgramPath(true);
+    }
   };
 
   const handleManualModeToggle = () => {
@@ -522,6 +534,12 @@ function Main() {
   useEffect(() => {
     const currentOS = detectOS();
     setOs(currentOS);
+
+    // eslint-disable-next-line promise/catch-or-return, promise/always-return
+    window.electronAPI.getResourcePath().then((path) => {
+      setProgramPath(path);
+      console.log('Program path:', path);
+    });
 
     // Register Event Handlers
     const copyHandler = (deleteCopy: boolean) => {
@@ -644,6 +662,11 @@ function Main() {
       }
     };
 
+    const handleSetProgramPath = () => {
+      console.log('request-set-program-path');
+      setToggleProgramPath(true);
+    };
+
     // Add event listeners
     console.log('Adding save file handler');
     window.electronAPI.onRequestNewFile(newFileHandler);
@@ -651,6 +674,7 @@ function Main() {
     window.electronAPI.onOpenFile(handleFileOpen);
     window.electronAPI.onRequestCopy(copyHandler);
     window.electronAPI.onRequestPaste(pasteHandler);
+    window.electronAPI.onRequestSetProgramPath(handleSetProgramPath);
     window.addEventListener('mouseup', handleMouseUp);
 
     // Cleanup function
@@ -661,6 +685,10 @@ function Main() {
       window.electronAPI.removeListener('open-file-result', handleFileOpen);
       window.electronAPI.removeListener('request-copy', copyHandler);
       window.electronAPI.removeListener('request-paste', pasteHandler);
+      window.electronAPI.removeListener(
+        'request-set-program-path',
+        handleSetProgramPath,
+      );
       window.removeEventListener('mouseup', handleMouseUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -797,6 +825,43 @@ function Main() {
             </div>
           </div>
         </div>
+        <Dialog
+          fullScreen={true}
+          open={toggleProgramPath}
+          onClose={() => setToggleProgramPath(false)}
+          PaperProps={{
+            component: 'form',
+            onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const formData = new FormData(event.currentTarget);
+              const formJson = Object.fromEntries((formData as any).entries());
+              const path = formJson.path;
+              console.log(path);
+              setToggleProgramPath(false);
+            },
+          }}
+        >
+          <DialogTitle>Path</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              required
+              margin="dense"
+              id="path"
+              name="path"
+              label="ArrayParser.exe Path"
+              type="text"
+              fullWidth
+              variant="standard"
+              value={programPath}
+              onChange={(e) => setProgramPath(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setToggleProgramPath(false)}>Cancel</Button>
+            <Button type="submit">Submit</Button>
+          </DialogActions>
+        </Dialog>
         <div className="main-content-editor">
           {processState[selectedProcessIndex]?.array.length > 0 &&
             processState[selectedProcessIndex]?.selectedArrayIndex !== null && (

@@ -117,6 +117,14 @@ export default class MenuBuilder {
             this.mainWindow.webContents.send('request-save-file', true);
           },
         },
+        { type: 'separator' },
+        {
+          label: 'Set Program Path',
+          accelerator: process.platform === 'darwin' ? 'Command+P' : 'Ctrl+P',
+          click: () => {
+            this.mainWindow.webContents.send('request-set-program-path');
+          },
+        },
       ],
     };
     const subMenuEdit: DarwinMenuItemConstructorOptions = {
@@ -305,6 +313,14 @@ export default class MenuBuilder {
             accelerator: 'Ctrl+W',
             click: () => {
               this.mainWindow.close();
+            },
+          },
+          { type: 'separator' },
+          {
+            label: 'Set &Program Path',
+            accelerator: 'Ctrl+P',
+            click: () => {
+              this.mainWindow.webContents.send('request-set-program-path');
             },
           },
         ],
